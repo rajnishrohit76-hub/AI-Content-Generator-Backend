@@ -1,42 +1,61 @@
 require("dotenv").config();
-// Imports 
+
 const express = require("express");
 const cors = require("cors");
-const mongoose = require("mongoose");
+const connectDB = require("./config/db");
+
 const authRouter = require("./routes/authRoutes");
 const aiRouter = require("./routes/aiRoutes");
 const paymentRoute = require("./routes/paymentRoute");
 const contactRoute = require("./routes/contactRoute");
 
-// Configurations 
 const app = express();
 
-// Object Creations
-app.use(cors());
+// ── CORS ──────────────────────────────────────────────────────────────────────
+app.use(
+  cors({
+    origin: "*", // tighten this to your frontend domain after testing
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
 
-// MongoDB Connection
-const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch((error) => console.log("MongoDB Connection Failed:", error.message));
-
-// Port Listening
-app.listen(PORT, () => console.log(`Server is Running on http://localhost:${PORT}`));
-
-// Testing Route
-app.get("/", (req, res) => {
-  res.send("Express Backend is running!");
+// ── DB Middleware ──────────────────────────────────────────────────────────────
+// Ensures DB is connected before every request (safe for serverless cold starts)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("DB Connection Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Database connection failed",
+      error: error.message,
+    });
+  }
 });
 
-// Authentication Base Route
+// ── Routes ────────────────────────────────────────────────────────────────────
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "API is running" });
+});
+
 app.use("/api/auth", authRouter);
-
-// Content Base Route
 app.use("/api/ai", aiRouter);
-
-// Payment Base Route
 app.use("/api/payment", paymentRoute);
-
-// Contact Base Route
 app.use("/api/contact", contactRoute);
+
+// ── Local Dev Server ──────────────────────────────────────────────────────────
+// Vercel doesn't use app.listen() — it imports the app directly.
+// This block only runs locally.
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () =>
+    console.log(`Server is running on http://localhost:${PORT}`)
+  );
+}
+
+module.exports = app;
